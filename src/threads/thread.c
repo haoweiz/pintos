@@ -314,6 +314,16 @@ thread_yield (void)
   intr_set_level (old_level);
 }
 
+/* Check every threads whether they should be awaked. */
+void check_blocked_time(struct thread *t, void *aux){
+  if (t->status == THREAD_BLOCKED && t->ticks_blocked > 0){
+    t->ticks_blocked--;
+    if (t->ticks_blocked == 0)
+      thread_unblock(t);
+  }
+}
+
+
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
 void
@@ -459,6 +469,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
+  t->ticks_blocked = 0;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;

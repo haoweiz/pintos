@@ -100,6 +100,8 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    int64_t ticks_blocked;              /* Time for blocked. */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -128,6 +130,7 @@ void thread_yield (void);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
+void check_blocked_time(struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
