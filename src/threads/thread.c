@@ -315,7 +315,7 @@ thread_yield (void)
 }
 
 /* Check every threads whether they should be awaked. */
-void check_blocked_time(struct thread *t, void *aux){
+void check_blocked_time(struct thread *t, void *aux UNUSED){
   if (t->status == THREAD_BLOCKED && t->ticks_blocked > 0){
     t->ticks_blocked--;
     if (t->ticks_blocked == 0)
@@ -493,6 +493,11 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+
+bool thread_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
+  return list_entry(a,struct thread,elem)->priority < list_entry(b,struct thread,elem)->priority;
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -503,8 +508,11 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  else{
+    struct list_elem *max_priority = list_max (&ready_list,thread_compare_priority,NULL);
+    list_remove (max_priority);
+    return list_entry (max_priority,struct thread,elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
