@@ -105,6 +105,9 @@ struct thread
     struct list locks;                  /* Locks this thread holds */
     struct lock *waiting_lock;          /* The lock this thread is waiting for */
     int original_priority;              /* Original priority of this thread */
+
+    int nice;                           /* Niceness of thread used in mlfqs */
+    int64_t recent_cpu;                 /* Used in mlfqs */
   };
 
 /* If false (default), use round-robin scheduler.
@@ -145,4 +148,9 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 bool thread_compare_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
+
+void increase_recent_cpu(void);
+void modify_priority(struct thread *t,void *aux UNUSED);
+void modify_cpu(struct thread *t,void *aux UNUSED);
+void modify_load_avg(void);
 #endif /* threads/thread.h */

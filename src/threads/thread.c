@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -19,6 +20,9 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+/* The average number of threads ready to run in OS used in mlfqs */
+int64_t load_avg;
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -348,9 +352,8 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  int old_priority = thread_current()->priority;
   thread_current ()->original_priority = new_priority;
-  if(list_empty(&thread_current()->locks) || new_priority > old_priority){
+  if(list_empty(&thread_current()->locks) || new_priority > thread_current()->priority){
     thread_current()->priority = new_priority;
     thread_yield();
   }
@@ -367,31 +370,31 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
+  modify_priority(thread_current(),NULL);
+  thread_yield();
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int temp = MULTIPLY_X_BY_N(load_avg,100);
+  return CONVERT_X_TO_INTEGER_NEAREST(temp);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return CONVERT_X_TO_INTEGER_NEAREST(MULTIPLY_X_BY_N(thread_current()->recent_cpu,100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -612,3 +615,44 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Increment by 1 for each clock tick */
+void increase_recent_cpu(void){
+  if (thread_current()!=idle_thread)
+    thread_current()->recent_cpu = ADD_X_AND_N(thread_current()->recent_cpu,1);
+}
+
+/* Modify Priority */
+void modify_priority(struct thread *t,void *aux UNUSED){
+  if (t!=idle_thread){
+    //priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+    t->priority = CONVERT_X_TO_INTEGER_NEAREST(CONVERT_N_TO_FIXED_POINT(PRI_MAX)-
+    t->recent_cpu/4-CONVERT_N_TO_FIXED_POINT(2*t->nice));
+    if (t->priority < PRI_MIN)
+      t->priority = PRI_MIN;
+    if (t->priority > PRI_MAX)
+      t->priority = PRI_MAX;
+  }
+}
+
+/* Modify recent_cpu */
+void modify_cpu(struct thread *t,void *aux UNUSED){
+  if (t != idle_thread){
+  int64_t fa = MULTIPLY_X_BY_N(load_avg,2);
+  int64_t fb = MULTIPLY_X_BY_N(load_avg,2)+CONVERT_N_TO_FIXED_POINT(1);
+  t->recent_cpu = MULTIPLY_X_BY_Y(DIVIDE_X_BY_Y(fa,fb),t->recent_cpu)+
+  CONVERT_N_TO_FIXED_POINT(t->nice);
+  }
+}
+
+/* Modify load average */
+void modify_load_avg(void){
+  int ready_threads = list_size(&ready_list);
+  if (thread_current()!=idle_thread){
+    ready_threads++;
+  }
+  int64_t fa = MULTIPLY_X_BY_N(load_avg,59);
+  int add1 = DIVIDE_X_BY_N(fa,60);
+  int add2 = DIVIDE_X_BY_N(CONVERT_N_TO_FIXED_POINT(ready_threads),60);
+  load_avg = ADD_X_AND_Y(add1,add2);
+}
