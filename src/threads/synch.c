@@ -184,6 +184,11 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
+/* Compare function in list of a lock */
+bool lock_compare_max_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
+  return list_entry(a,struct lock,elem)->max_priority < list_entry(b,struct lock,elem)->max_priority;
+}
+
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -199,8 +204,31 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  if(lock->holder != NULL && !thread_mlfqs){
+    thread_current()->waiting_lock = lock;
+    struct lock *wlock = lock;
+    while(wlock != NULL && thread_current()->priority > wlock->max_priority){
+      wlock->max_priority = thread_current()->priority;
+      struct list_elem *max_priority_in_locks = list_max(&wlock->holder->locks,lock_compare_max_priority,NULL);
+      int maximal = list_entry(max_priority_in_locks,struct lock,elem)->max_priority;
+      if(wlock->holder->priority < maximal)
+        wlock->holder->priority = maximal;
+      wlock = wlock->holder->waiting_lock;
+    }
+  }
+
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+  
+  if(!thread_mlfqs){
+    thread_current()->waiting_lock = NULL;
+    lock->max_priority = thread_current()->priority;
+    list_push_back(&thread_current()->locks,&lock->elem);
+    if(lock->max_priority > thread_current()->priority){
+      thread_current()->priority = lock->max_priority;
+      thread_yield();
+    }
+  }
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -233,6 +261,18 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
+  if(!thread_mlfqs){
+    list_remove(&lock->elem);
+    int maximal = thread_current()->original_priority;
+    if(!list_empty(&thread_current()->locks)){
+      struct list_elem *max_priority_in_locks = list_max(&thread_current()->locks,lock_compare_max_priority,NULL);
+      int p = list_entry(max_priority_in_locks,struct lock,elem)->max_priority;
+      if(p > maximal)
+        maximal = p;
+    }
+    thread_current()->priority = maximal;
+  }
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);

@@ -102,6 +102,9 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
 
     int64_t ticks_blocked;              /* Time for blocked. */
+    struct list locks;                  /* Locks this thread holds */
+    struct lock *waiting_lock;          /* The lock this thread is waiting for */
+    int original_priority;              /* Original priority of this thread */
   };
 
 /* If false (default), use round-robin scheduler.
